@@ -116,9 +116,13 @@ const ClipboardIndicator = GObject.registerClass({
         this._cursorActor = new Clutter.Actor({ opacity: 0, width: 1, height: 1 });
         Main.uiGroup.add_child(this._cursorActor);
 
+        // Runs after PanelMenu.Button's own handler, which sizes the menu
+        // for the panel, so the max-height set here wins
         this.menu.connect('open-state-changed', (menu, isOpen) => {
             if (!isOpen)
                 this.menu.sourceActor = this;
+            else if (this.menu.sourceActor === this._cursorActor)
+                this._fitMenuToCursor();
         });
 
         this.extension = extension;
@@ -1697,6 +1701,25 @@ const ClipboardIndicator = GObject.registerClass({
             this.menu.sourceActor = this._cursorActor;
         }
         this.menu.toggle();
+    }
+
+    // The menu opens below the pointer and flips above it only when it fits
+    // there, and GNOME Shell never moves it vertically to keep it on screen.
+    // Limit its height to the larger free space above or below the pointer,
+    // so it always fits on one side of it.
+    _fitMenuToCursor () {
+        const [, y] = global.get_pointer();
+        const monitor = Main.layoutManager.findIndexForActor(this._cursorActor);
+        const workArea = Main.layoutManager.getWorkAreaForMonitor(monitor);
+        const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
+        const themeNode = this.menu.actor.get_theme_node();
+        const gap = themeNode.get_length('-boxpointer-gap') + themeNode.get_length('-arrow-rise');
+        const margins = this.menu.actor.margin_top + this.menu.actor.margin_bottom;
+
+        const above = y - workArea.y;
+        const below = workArea.y + workArea.height - y;
+        const space = Math.max(above, below) - gap - margins;
+        this.menu.actor.style = `max-height: ${Math.max(0, Math.floor(space / scaleFactor))}px;`;
     }
 
 
