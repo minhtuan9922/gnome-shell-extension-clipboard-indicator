@@ -175,6 +175,11 @@ class Settings {
             subtitle: _("When using the keyboard shortcut, open the menu at the cursor position")
         });
 
+        this.field_open_at_text_cursor = new Adw.SwitchRow({
+            title: _("Open menu at text cursor"),
+            subtitle: _("When using the keyboard shortcut, open the menu where you are typing, if the app reports it")
+        });
+
         this.field_show_delete_button = new Adw.SwitchRow({
             title: _("Delete"),
             subtitle: _("Show the delete button on each item")
@@ -310,6 +315,7 @@ class Settings {
         this.behavior.add(this.field_move_item_first);
         this.behavior.add(this.field_keep_selected_on_clear);
         this.behavior.add(this.field_open_at_cursor);
+        this.behavior.add(this.field_open_at_text_cursor);
         this.behavior.add(this.field_paste_on_select);
         this.behavior.add(this.field_cache_images);
         this.behavior.add(this.field_clear_on_boot);
@@ -370,6 +376,7 @@ class Settings {
         this.schema.bind(PrefsFields.CLEAR_ON_BOOT, this.field_clear_on_boot, 'active', Gio.SettingsBindFlags.DEFAULT);
         this.schema.bind(PrefsFields.PASTE_ON_SELECT, this.field_paste_on_select, 'active', Gio.SettingsBindFlags.DEFAULT);
         this.schema.bind(PrefsFields.OPEN_AT_CURSOR, this.field_open_at_cursor, 'active', Gio.SettingsBindFlags.DEFAULT);
+        this.schema.bind(PrefsFields.OPEN_AT_TEXT_CURSOR, this.field_open_at_text_cursor, 'active', Gio.SettingsBindFlags.DEFAULT);
         this.schema.bind(PrefsFields.CACHE_IMAGES, this.field_cache_images, 'active', Gio.SettingsBindFlags.DEFAULT);
         this.schema.bind(PrefsFields.CLEAR_HISTORY_ON_INTERVAL, this.field_clear_history_on_interval, 'active', Gio.SettingsBindFlags.DEFAULT);
         this.schema.bind(PrefsFields.CLEAR_HISTORY_INTERVAL, this.field_clear_history_interval, 'value', Gio.SettingsBindFlags.DEFAULT);

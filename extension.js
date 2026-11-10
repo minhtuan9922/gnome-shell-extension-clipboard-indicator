@@ -7,6 +7,7 @@ import St from 'gi://St';
 
 import * as AnimationUtils from 'resource:///org/gnome/shell/misc/animationUtils.js';
 import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
+import * as IBusManager from 'resource:///org/gnome/shell/misc/ibusManager.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as ModalDialog from 'resource:///org/gnome/shell/ui/modalDialog.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
@@ -54,6 +55,7 @@ let NEXT_HISTORY_CLEAR        = -1;
 let CASE_SENSITIVE_SEARCH     = false;
 let REGEX_SEARCH              = false;
 let OPEN_AT_CURSOR            = false;
+let OPEN_AT_TEXT_CURSOR       = false;
 let SHOW_SEARCH_BAR           = true;
 let SHOW_PRIVATE_MODE         = true;
 let SHOW_SETTINGS_BUTTON      = true;
@@ -104,6 +106,8 @@ const ClipboardIndicator = GObject.registerClass({
         this._destroyNotifSource();
         this.dialogManager.destroy();
         this.keyboard.destroy();
+        Main.inputMethod.disconnectObject(this);
+        IBusManager.getIBusManager().disconnectObject(this);
         this._cursorActor.destroy();
         this._cursorActor = null;
 
@@ -115,6 +119,17 @@ const ClipboardIndicator = GObject.registerClass({
 
         this._cursorActor = new Clutter.Actor({ opacity: 0, width: 1, height: 1 });
         Main.uiGroup.add_child(this._cursorActor);
+
+        // Track the text cursor of the focused app, the way the on-screen
+        // keyboard does. Wayland apps report it through the input method,
+        // X11 apps only through IBus
+        this._textCursor = null;
+        Main.inputMethod.connectObject('cursor-location-changed',
+            (method, rect) => this._setTextCursor(rect), this);
+        IBusManager.getIBusManager().connectObject('set-cursor-location', (manager, rect) => {
+            if (!Main.inputMethod.currentFocus)
+                this._setTextCursor(rect);
+        }, this);
 
         // Runs after PanelMenu.Button's own handler, which sizes the menu
         // for the panel, so the max-height set here wins
@@ -1480,6 +1495,7 @@ const ClipboardIndicator = GObject.registerClass({
         CASE_SENSITIVE_SEARCH       = settings.get_boolean(PrefsFields.CASE_SENSITIVE_SEARCH);
         REGEX_SEARCH                = settings.get_boolean(PrefsFields.REGEX_SEARCH);
         OPEN_AT_CURSOR              = settings.get_boolean(PrefsFields.OPEN_AT_CURSOR);
+        OPEN_AT_TEXT_CURSOR         = settings.get_boolean(PrefsFields.OPEN_AT_TEXT_CURSOR);
         SHOW_SEARCH_BAR             = settings.get_boolean(PrefsFields.SHOW_SEARCH_BAR);
         SHOW_PRIVATE_MODE           = settings.get_boolean(PrefsFields.SHOW_PRIVATE_MODE);
         SHOW_SETTINGS_BUTTON        = settings.get_boolean(PrefsFields.SHOW_SETTINGS_BUTTON);
@@ -1694,21 +1710,60 @@ const ClipboardIndicator = GObject.registerClass({
         });
     }
 
+    _setTextCursor (rect) {
+        const x = rect.origin?.x ?? rect.x;
+        const y = rect.origin?.y ?? rect.y;
+        const width = rect.size?.width ?? rect.width;
+        const height = rect.size?.height ?? rect.height;
+        this._textCursor = {
+            x, y,
+            width: Math.max(1, width),
+            height: Math.max(1, height),
+            window: global.display.focus_window,
+        };
+    }
+
+    // The last text cursor position, if it belongs to the focused window and
+    // lies inside it
+    _getTextCursor () {
+        const cursor = this._textCursor;
+        const window = global.display.focus_window;
+        if (!cursor || !window || cursor.window !== window)
+            return null;
+
+        const frame = window.get_frame_rect();
+        if (cursor.x + cursor.width < frame.x || cursor.x > frame.x + frame.width ||
+            cursor.y + cursor.height < frame.y || cursor.y > frame.y + frame.height)
+            return null;
+
+        return cursor;
+    }
+
     _toggleMenu () {
-        if (!this.menu.isOpen && OPEN_AT_CURSOR) {
-            const [x, y] = global.get_pointer();
-            this._cursorActor.set_position(x, y);
-            this.menu.sourceActor = this._cursorActor;
+        if (!this.menu.isOpen) {
+            const textCursor = OPEN_AT_TEXT_CURSOR ? this._getTextCursor() : null;
+            if (textCursor) {
+                this._cursorActor.set_position(textCursor.x, textCursor.y);
+                this._cursorActor.set_size(textCursor.width, textCursor.height);
+                this.menu.sourceActor = this._cursorActor;
+            }
+            else if (OPEN_AT_CURSOR) {
+                const [x, y] = global.get_pointer();
+                this._cursorActor.set_position(x, y);
+                this._cursorActor.set_size(1, 1);
+                this.menu.sourceActor = this._cursorActor;
+            }
         }
         this.menu.toggle();
     }
 
-    // The menu opens below the pointer and flips above it only when it fits
-    // there, and GNOME Shell never moves it vertically to keep it on screen.
-    // Limit its height to the larger free space above or below the pointer,
-    // so it always fits on one side of it.
+    // The menu opens below the pointer or text cursor and flips above it only
+    // when it fits there, and GNOME Shell never moves it vertically to keep it
+    // on screen. Limit its height to the larger free space above or below, so
+    // it always fits on one side of it.
     _fitMenuToCursor () {
-        const [, y] = global.get_pointer();
+        const [, y] = this._cursorActor.get_position();
+        const height = this._cursorActor.height;
         const monitor = Main.layoutManager.findIndexForActor(this._cursorActor);
         const workArea = Main.layoutManager.getWorkAreaForMonitor(monitor);
         const scaleFactor = St.ThemeContext.get_for_stage(global.stage).scale_factor;
@@ -1717,7 +1772,7 @@ const ClipboardIndicator = GObject.registerClass({
         const margins = this.menu.actor.margin_top + this.menu.actor.margin_bottom;
 
         const above = y - workArea.y;
-        const below = workArea.y + workArea.height - y;
+        const below = workArea.y + workArea.height - (y + height);
         const space = Math.max(above, below) - gap - margins;
         this.menu.actor.style = `max-height: ${Math.max(0, Math.floor(space / scaleFactor))}px;`;
     }

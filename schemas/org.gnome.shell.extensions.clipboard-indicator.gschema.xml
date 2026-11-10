@@ -285,6 +285,13 @@
             If true, the menu will open at the cursor position when using the keyboard shortcut.
         </description>
     </key>
+    <key name="open-at-text-cursor" type="b">
+        <default>false</default>
+        <summary>Open menu at the text cursor</summary>
+        <description>
+            If true, the keyboard shortcut opens the menu at the text cursor of the focused app when the app reports it. Otherwise the menu opens at the mouse pointer or in the panel, as set by open-at-cursor.
+        </description>
+    </key>
     <key name="show-delete-button" type="b">
         <default>true</default>
         <summary>Show the delete button on each item</summary>

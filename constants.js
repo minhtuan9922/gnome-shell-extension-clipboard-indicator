@@ -38,6 +38,7 @@ export const PrefsFields = {
     SHOW_SETTINGS_BUTTON            : 'show-settings-button',
     SHOW_CLEAR_HISTORY_BUTTON       : 'show-clear-history-button',
     OPEN_AT_CURSOR                  : 'open-at-cursor',
+    OPEN_AT_TEXT_CURSOR             : 'open-at-text-cursor',
     SHOW_DELETE_BUTTON              : 'show-delete-button',
     SHOW_TAG_BUTTON                 : 'show-tag-button',
     SHOW_PIN_BUTTON                 : 'show-pin-button',
